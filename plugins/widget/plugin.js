@@ -3040,8 +3040,7 @@
 			listener2 = widget.repository.on( 'checkSelection', cancel, null, null, 0 );
 
 		if ( needsScrollHack ) {
-			var docElement = doc.getDocumentElement().$,
-				scrollTop = docElement.scrollTop;
+			var scrollTop = editor.editable().getDocumentScroll( true );
 		}
 
 		// Once the clone of the widget is inside of copybin, select
@@ -3051,8 +3050,9 @@
 		range.selectNodeContents( copybin );
 		range.select();
 
-		if ( needsScrollHack )
-			docElement.scrollTop = scrollTop;
+		if ( needsScrollHack ) {
+			editor.editable().setDocumentScroll( scrollTop );
+		}
 
 		setTimeout( function() {
 			// [IE] Focus widget before removing copybin to avoid scroll jump.
