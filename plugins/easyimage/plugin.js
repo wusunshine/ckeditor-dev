@@ -129,18 +129,13 @@
 	}
 
 	function registerUploadWidget( editor ) {
-		var uploadUrl = CKEDITOR.fileTools.getUploadUrl( editor.config, 'easyimage' );
-
 		CKEDITOR.fileTools.addUploadWidget( editor, 'uploadeasyimage', {
 			supportedTypes: /image\/(jpeg|png|gif|bmp)/,
 
-			uploadUrl: uploadUrl,
+			// Easy image uses only upload method, as is manually handled in onUploading function.
+			loadMethod: 'upload',
 
-			loadMethod: 'loadAndUpload',
-
-			additionalRequestParameters: {
-				isEasyImage: true
-			},
+			loaderType: CKEDITOR.plugins.cloudservices.cloudServicesLoader,
 
 			fileToElement: function() {
 				var img = new CKEDITOR.dom.element( 'img' );
@@ -165,42 +160,6 @@
 			}
 		} );
 
-		editor.on( 'fileUploadRequest', function( evt ) {
-			var requestData = evt.data.requestData;
-
-			if ( !requestData.isEasyImage ) {
-				return;
-			}
-
-			evt.data.requestData.file = evt.data.requestData.upload;
-			delete evt.data.requestData.upload;
-
-			// This property is used by fileUploadResponse callback to identify EI requests.
-			evt.data.fileLoader.isEasyImage = true;
-
-			evt.data.fileLoader.xhr.setRequestHeader( 'Authorization', editor.config.easyimage_token );
-		} );
-
-		editor.on( 'fileUploadResponse', function( evt ) {
-			var fileLoader = evt.data.fileLoader,
-				xhr = fileLoader.xhr,
-				response;
-
-			if ( !fileLoader.isEasyImage ) {
-				return;
-			}
-
-			evt.stop();
-
-			try {
-				response = JSON.parse( xhr.responseText );
-
-				evt.data.response = response;
-			} catch ( e ) {
-				CKEDITOR.warn( 'filetools-response-error', { responseText: xhr.responseText } );
-			}
-		} );
-
 		// Handle images which are not available in the dataTransfer.
 		// This means that we need to read them from the <img src="data:..."> elements.
 		editor.on( 'paste', function( evt ) {
@@ -214,6 +173,7 @@
 			var data = evt.data,
 				// Prevent XSS attacks.
 				tempDoc = document.implementation.createHTMLDocument( '' ),
+				widgetDef = editor.widgets.registered.uploadeasyimage,
 				temp = new CKEDITOR.dom.element( tempDoc.body ),
 				imgs, img, i;
 
@@ -233,8 +193,8 @@
 
 				// We are not uploading images in non-editable blocs and fake objects (http://dev.ckeditor.com/ticket/13003).
 				if ( isDataInSrc && isRealObject && !img.data( 'cke-upload-id' ) && !img.isReadOnly( 1 ) ) {
-					var loader = editor.uploadRepository.create( img.getAttribute( 'src' ) );
-					loader.upload( uploadUrl );
+					var loader = editor.uploadRepository.create( img.getAttribute( 'src' ), undefined, widgetDef.loaderType );
+					loader.upload( widgetDef.uploadUrl, widgetDef.additionalRequestParameters );
 
 					fileTools.markElement( img, 'uploadeasyimage', loader.id );
 
@@ -290,7 +250,7 @@
 	};
 
 	CKEDITOR.plugins.add( 'easyimage', {
-		requires: 'image2,uploadwidget,contextmenu,dialog',
+		requires: 'image2,uploadwidget,contextmenu,dialog,cloudservices',
 		lang: 'en',
 
 		onLoad: function() {

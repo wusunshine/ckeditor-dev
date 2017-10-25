@@ -4,42 +4,34 @@
 /* bender-include: %BASE_PATH%/plugins/uploadfile/_helpers/waitForImage.js */
 /* global pasteFiles, waitForImage */
 
-'use strict';
-
 ( function() {
-	var uploadCount, loadAndUploadCount, lastUploadUrl, resumeAfter, tests,
+	'use strict';
+
+	var uploadCount, loadAndUploadCount, resumeAfter, tests,
 		IMG_URL = '%BASE_PATH%_assets/logo.png',
 		DATA_IMG = 'data:',
-		BLOB_IMG = 'blob:';
+		BLOB_IMG = 'blob:',
+		commonConfig = {
+			cloudServices_url: 'http://foo/upload',
+			// Disable pasteFilter on Webkits (pasteFilter defaults semantic-text on Webkits).
+			pasteFilter: null
+		};
 
 	bender.editors = {
 		classic: {
 			name: 'classic',
-			config: {
-				easyimageUploadUrl: 'http://foo/upload',
-				// Disable pasteFilter on Webkits (pasteFilter defaults semantic-text on Webkits).
-				pasteFilter: null
-			}
+			config: commonConfig
 		},
 
 		divarea: {
 			name: 'divarea',
-			config: {
-				extraPlugins: 'divarea',
-				easyimageUploadUrl: 'http://foo/upload',
-				// Disable pasteFilter on Webkits (pasteFilter defaults semantic-text on Webkits).
-				pasteFilter: null
-			}
+			config: CKEDITOR.tools.extend( { extraPlugins: 'divarea' }, commonConfig )
 		},
 
 		inline: {
 			name: 'inline',
 			creator: 'inline',
-			config: {
-				easyimageUploadUrl: 'http://foo/upload',
-				// Disable pasteFilter on Webkits (pasteFilter defaults semantic-text on Webkits).
-				pasteFilter: null
-			}
+			config: commonConfig
 		}
 	};
 
@@ -65,24 +57,22 @@
 				}
 			};
 
-			responseData[ 'default' ] = IMG_URL;
+			responseData.response[ 'default' ] = IMG_URL;
 			resumeAfter = bender.tools.resumeAfter;
 
-			CKEDITOR.fileTools.fileLoader.prototype.loadAndUpload = function( url ) {
+			// Approach taken from tests/plugins/uploadwidget/uploadwidget.js test.
+			CKEDITOR.plugins.cloudservices.cloudServicesLoader.prototype.loadAndUpload = function() {
 				loadAndUploadCount++;
-				lastUploadUrl = url;
 
 				this.responseData = CKEDITOR.tools.clone( responseData );
 			};
 
-			CKEDITOR.fileTools.fileLoader.prototype.load = function() {};
+			CKEDITOR.plugins.cloudservices.cloudServicesLoader.prototype.load = function() {};
 
-			CKEDITOR.fileTools.fileLoader.prototype.upload = function( url ) {
+			sinon.stub( CKEDITOR.plugins.cloudservices.cloudServicesLoader.prototype, 'upload', function() {
 				uploadCount++;
-				lastUploadUrl = url;
-
 				this.responseData = CKEDITOR.tools.clone( responseData );
-			};
+			} );
 		},
 
 		setUp: function() {
@@ -102,6 +92,10 @@
 
 			if ( CKEDITOR.fileTools.bindNotifications.reset ) {
 				CKEDITOR.fileTools.bindNotifications.reset();
+			}
+
+			if ( CKEDITOR.plugins.cloudservices.cloudServicesLoader.prototype.upload.reset ) {
+				CKEDITOR.plugins.cloudservices.cloudServicesLoader.prototype.upload.reset();
 			}
 		},
 
@@ -129,9 +123,8 @@
 				assert.sameData( '<p><img alt="" src="' + IMG_URL + '" /></p>', editor.getData() );
 				assert.areSame( 1, editor.editable().find( 'img[data-widget="image"]' ).count() );
 
-				assert.areSame( 1, loadAndUploadCount );
-				assert.areSame( 0, uploadCount );
-				assert.areSame( 'http://foo/upload', lastUploadUrl );
+				assert.areSame( 0, loadAndUploadCount );
+				assert.areSame( 1, uploadCount );
 			} );
 		},
 
@@ -161,7 +154,6 @@
 
 					assert.areSame( 0, loadAndUploadCount );
 					assert.areSame( 1, uploadCount );
-					assert.areSame( 'http://foo/upload', lastUploadUrl );
 				} );
 			} );
 		},
@@ -435,6 +427,65 @@
 				resume( function() {
 					assert.isTrue( createspy.notCalled );
 				} );
+			} );
+
+			wait();
+		},
+
+		'test cloudservices URL/request params can be customized': function( editor ) {
+			var uploadEasyImageDef = editor.widgets.registered.uploadeasyimage,
+				originalUploadUrl = uploadEasyImageDef.uploadUrl,
+				originalAdditionalParams = uploadEasyImageDef.additionalRequestParameters,
+				loader;
+
+			// Upload widget might have an uploadUrl changed in definition, allowing for upload URL customization.
+			uploadEasyImageDef.uploadUrl = 'https://customDomain.localhost/endpoint';
+			uploadEasyImageDef.additionalRequestParameters = { a: 1 };
+
+			resumeAfter( editor, 'paste', function() {
+				// Restore original value.
+				uploadEasyImageDef.uploadUrl = originalUploadUrl;
+				uploadEasyImageDef.additionalRequestParameters = originalAdditionalParams;
+
+				loader = editor.uploadRepository.loaders[ 0 ];
+
+				sinon.assert.calledWith( loader.upload, 'https://customDomain.localhost/endpoint', { a: 1 } );
+				assert.isTrue( true );
+			} );
+
+			editor.fire( 'paste', {
+				dataValue: '<img src="' + bender.tools.pngBase64 + '">'
+			} );
+
+			wait();
+		},
+
+		'test loader type can be customized': function( editor ) {
+			var uploadEasyImageDef = editor.widgets.registered.uploadeasyimage,
+				originalType = uploadEasyImageDef.loaderType,
+				CloudServicesLoader = CKEDITOR.plugins.cloudservices.cloudServicesLoader,
+				loader;
+
+			function LoaderSubclass( editor, fileOrData, fileName, token ) {
+				CloudServicesLoader.call( this, editor, fileOrData, fileName, token );
+			}
+
+			LoaderSubclass.prototype = CKEDITOR.tools.extend( {}, CloudServicesLoader.prototype );
+
+			// Upload widget might have a loaderType changed in definition, allowing for loader type customization.
+			uploadEasyImageDef.loaderType = LoaderSubclass;
+
+			resumeAfter( editor, 'paste', function() {
+				// Restore original value.
+				uploadEasyImageDef.loaderType = originalType;
+
+				loader = editor.uploadRepository.loaders[ 0 ];
+
+				assert.isInstanceOf( LoaderSubclass, loader, 'Loader type' );
+			} );
+
+			editor.fire( 'paste', {
+				dataValue: '<img src="' + bender.tools.pngBase64 + '">'
 			} );
 
 			wait();
