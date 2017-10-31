@@ -111,7 +111,6 @@
 				var output = [],
 					isStarted = false;
 				for ( var menuItem in items ) {
-
 					if ( items[ menuItem ] instanceof CKEDITOR.ui.richCombo ) {
 						if ( isStarted ) {
 							isStarted = false;
