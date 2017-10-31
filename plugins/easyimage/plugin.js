@@ -94,38 +94,41 @@
 	}
 
 	function registerWidget( editor ) {
-		var config = editor.config;
-
-		CKEDITOR.plugins.imagebase.addImageWidget( editor, 'easyimage', {
-			allowedContent: {
-				figure: {
-					classes: '!' + config.easyimage_class + ',' + config.easyimage_sideClass
-				}
-			},
-
-			requiredContent: 'figure(!' + config.easyimage_class + ')',
-
-			upcasts: {
-				figure: function( element ) {
-					// http://dev.ckeditor.com/ticket/11110 Don't initialize on pasted fake objects.
-					if ( element.attributes[ 'data-cke-realelement' ] ) {
-						return;
+		var config = editor.config,
+			widgetDefinition = {
+				allowedContent: {
+					figure: {
+						classes: '!' + config.easyimage_class + ',' + config.easyimage_sideClass
 					}
+				},
 
-					if ( element.name === 'figure' && element.hasClass( config.easyimage_class ) ) {
-						return element;
+				requiredContent: 'figure(!' + config.easyimage_class + ')',
+
+				upcasts: {
+					figure: function( element ) {
+						// http://dev.ckeditor.com/ticket/11110 Don't initialize on pasted fake objects.
+						if ( element.attributes[ 'data-cke-realelement' ] ) {
+							return;
+						}
+
+						if ( element.name === 'figure' && element.hasClass( config.easyimage_class ) ) {
+							return element;
+						}
 					}
-				}
-			},
+				},
 
-			init: function() {
-				this.on( 'contextMenu', function( evt ) {
-					evt.data.easyimageFull = editor.getCommand( 'easyimageFull' ).state;
-					evt.data.easyimageSide = editor.getCommand( 'easyimageSide' ).state;
-					evt.data.easyimageAlt = editor.getCommand( 'easyimageAlt' ).state;
-				} );
-			}
-		} );
+				init: function() {
+					this.on( 'contextMenu', function( evt ) {
+						evt.data.easyimageFull = editor.getCommand( 'easyimageFull' ).state;
+						evt.data.easyimageSide = editor.getCommand( 'easyimageSide' ).state;
+						evt.data.easyimageAlt = editor.getCommand( 'easyimageAlt' ).state;
+					} );
+				}
+			};
+
+		widgetDefinition = CKEDITOR.plugins.imagebase.addFeature( 'link', widgetDefinition );
+
+		CKEDITOR.plugins.imagebase.addImageWidget( editor, 'easyimage', widgetDefinition );
 	}
 
 	function loadStyles( editor, plugin ) {
@@ -140,7 +143,7 @@
 	}
 
 	CKEDITOR.plugins.add( 'easyimage', {
-		requires: 'imagebase,contextmenu,dialog',
+		requires: 'imagebase,contextmenu,dialog,link',
 		lang: 'en',
 
 		onLoad: function() {
